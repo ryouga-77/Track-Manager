@@ -189,16 +189,16 @@
 
                     <!-- プレビュー & 修正履歴 -->
                     <div class="bg-green-50/50 rounded-2xl p-6 border-2 border-green-50 mb-10">
-                        <h3 class="text-sm font-extrabold text-green-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-headphones"></i> Preview & Revision History</h3>
+                        <h3 class="text-sm font-extrabold text-green-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-headphones"></i> OriginalVer Preview & History</h3>
                         <div class="bg-white rounded-xl p-4 border border-green-100 shadow-sm mb-4 flex items-center gap-4">
                             <button id="play-btn" class="w-12 h-12 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0 hover:bg-green-600 transition-colors shadow-sm" onclick="togglePlay()">
                                 <i class="fa-solid fa-play ml-1" id="play-icon"></i>
                             </button>
                             <div class="flex-1 w-full overflow-hidden">
                                 <div class="flex justify-between text-xs font-bold text-gray-500 mb-1 truncate">
-                                    <span id="preview-filename">プレビュー用オーディオが選択されていません</span>
+                                    <span id="preview-filename">OriginalVerの音声ファイルが未設定です</span>
                                 </div>
-                                <input type="file" id="preview-file" accept="audio/*" class="text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-green-50 file:text-green-600 hover:file:bg-green-100 cursor-pointer outline-none w-full" onchange="loadPreviewAudio(this)">
+                                <div class="text-[10px] text-gray-400 font-bold">※「OriginalVer」にアップロードされた最新の音源が自動で再生されます</div>
                                 <audio id="audio-player" class="hidden" onended="resetPlayer()"></audio>
                             </div>
                         </div>
@@ -297,13 +297,11 @@
                     </div>
                     <div>
                         <label class="block text-sm font-extrabold text-gray-700 mb-2">Google スプレッドシート ID</label>
-                        <input type="text" id="set-ss" placeholder="1ABCDEFG..." class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 focus:border-green-400 focus:bg-white transition-all" onchange="saveSettings()">
-                        <p class="text-[10px] text-gray-400 font-bold mt-1">※このシートに曲のメタデータ（BPM、ステータス、履歴等）が保存されます。</p>
+                        <input type="text" id="set-ss" placeholder="1nl3bhxIkOOmAnu9BhQII4g-cgfBcTECV0iW1X8lZSo4" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 focus:border-green-400 focus:bg-white transition-all" onchange="saveSettings()">
                     </div>
                     <div>
                         <label class="block text-sm font-extrabold text-gray-700 mb-2">Google Drive ルートフォルダ ID</label>
                         <input type="text" id="set-drive" placeholder="1XcA91WI_WlheH1tNNxsTczkbCNrr-Y0u" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 focus:border-green-400 focus:bg-white transition-all" onchange="saveSettings()">
-                        <p class="text-[10px] text-gray-400 font-bold mt-1">※このフォルダ内に、各曲の保存先フォルダが自動生成されます。</p>
                     </div>
                     <div class="pt-4">
                         <button onclick="saveSettings()" class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-all">設定を保存</button>
@@ -319,7 +317,7 @@
         <span id="toast-msg">保存しました！</span>
     </div>
 
-    <!-- DOM生成用テンプレート (HTML直書き排除用) -->
+    <!-- DOM生成用テンプレート -->
     <template id="tmpl-dashboard-row">
         <tr class="hover:bg-gray-50 transition-colors group cursor-pointer border-b border-gray-50 last:border-0">
             <td class="p-5"><div class="row-title font-extrabold text-gray-800 group-hover:text-green-600 transition-colors"></div></td>
@@ -370,7 +368,7 @@
                 </div>
                 <div class="file-status-badge"></div>
             </div>
-            <div class="pl-13 md:pl-13 mt-2 flex flex-col gap-2">
+            <div class="pl-0 mt-2 flex flex-col gap-2">
                 <input type="text" class="file-memo-input w-full bg-white border border-gray-200 rounded-xl outline-none text-xs font-bold text-gray-600 px-3 py-2.5 focus:border-green-400 focus:ring-2 focus:ring-green-50 transition-colors" placeholder="アップロード時の個別メモ">
                 <div class="flex flex-wrap items-center gap-2 mt-1">
                     <input type="file" class="file-upload-input text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer max-w-[200px] outline-none">
@@ -405,7 +403,6 @@
     </template>
 
     <script>
-        // 定数設定
         const STAGES = ['メモ', '作曲', '編曲', 'ミックス', 'マスタリング', '完成'];
         const FILE_TYPES = [
             { id: 'vocal', name: 'OriginalVer', icon: 'fa-microphone-lines' },
@@ -415,23 +412,20 @@
             { id: 'project', name: 'Project-Data', icon: 'fa-folder-tree' }
         ];
 
-        // 状態管理
         let projectsData = [];
         let currentProject = null;
         let isUploading = false;
 
-        // UI初期化
         window.onload = () => {
             loadSettings();
             generateMockIdeas();
             fetchData();
         };
 
-        // --- 設定 (LocalStorage) ---
         function loadSettings() {
             document.getElementById('set-gas').value = localStorage.getItem('tm_gas') || '';
-            document.getElementById('set-ss').value = localStorage.getItem('tm_ss') || '';
-            document.getElementById('set-drive').value = localStorage.getItem('tm_drive') || '';
+            document.getElementById('set-ss').value = localStorage.getItem('tm_ss') || '1nl3bhxIkOOmAnu9BhQII4g-cgfBcTECV0iW1X8lZSo4';
+            document.getElementById('set-drive').value = localStorage.getItem('tm_drive') || '1XcA91WI_WlheH1tNNxsTczkbCNrr-Y0u';
             updateApiStatus();
         }
 
@@ -462,7 +456,6 @@
             }
         }
 
-        // --- データ取得 (GAS) ---
         async function fetchData() {
             const gasUrl = localStorage.getItem('tm_gas');
             const ssId = localStorage.getItem('tm_ss');
@@ -474,7 +467,7 @@
                 const td = document.createElement('td');
                 td.colSpan = 5;
                 td.className = "p-8 text-center text-red-400 font-bold";
-                td.textContent = "設定画面からGAS URLとスプレッドシートIDを登録してください";
+                td.textContent = "設定画面からGAS URLを設定してください";
                 tr.appendChild(td);
                 list.appendChild(tr);
                 return;
@@ -490,7 +483,6 @@
             list.appendChild(tr);
 
             try {
-                // GETリクエストでスプレッドシートのデータを取得
                 const res = await fetch(`${gasUrl}?ssId=${ssId}`);
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
@@ -505,7 +497,6 @@
             }
         }
 
-        // --- View切り替え ---
         function switchView(viewId) {
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -526,7 +517,6 @@
             if (viewId === 'roadmap') renderRoadmap();
         }
 
-        // --- DOM生成系 (Template使用) ---
         function renderDashboard() {
             const list = document.getElementById('dashboard-list');
             list.innerHTML = '';
@@ -618,7 +608,6 @@
             }
         }
 
-        // --- プロジェクト詳細操作 ---
         function createNewProject() {
             currentProject = {
                 ProjectId: "", Title: "", BPM: "", Key: "", Stage: 0,
@@ -629,7 +618,7 @@
         }
 
         function openProject(p) {
-            currentProject = JSON.parse(JSON.stringify(p)); // Deep copy
+            currentProject = JSON.parse(JSON.stringify(p));
             applyProjectToForm();
             switchView('detail');
             window.scrollTo(0, 0);
@@ -647,6 +636,7 @@
             updateExpectedPaths();
             renderFiles();
             renderHistory();
+            updatePreviewPlayer(); // OriginalVerのプレイヤーを自動セット
         }
 
         function updateStageUI() {
@@ -708,7 +698,6 @@
             });
         }
 
-        // --- GAS保存アクション ---
         async function saveProjectData() {
             if (isUploading) return;
             const gasUrl = localStorage.getItem('tm_gas');
@@ -741,7 +730,7 @@
                     currentProject.FolderUrl = data.folderUrl;
                     document.getElementById('detail-folder').value = data.folderUrl;
                     showToast("プロジェクトを保存しました");
-                    fetchData(); // 一覧を再取得
+                    fetchData();
                 } else { throw new Error(data.message); }
             } catch (err) {
                 console.error(err);
@@ -752,7 +741,6 @@
             }
         }
 
-        // --- ファイルアップロードと描画 ---
         function renderFiles() {
             const container = document.getElementById('file-checklist');
             container.innerHTML = '';
@@ -855,7 +843,7 @@
                         currentProject.History.unshift({ time: timeStr, action: `[${FILE_TYPES.find(f=>f.id===typeId).name}] Upload`, detail: memo || fileName });
                         
                         showToast("アップロード完了！");
-                        applyProjectToForm(); // 再描画
+                        applyProjectToForm();
                     } else { throw new Error(data.message); }
                 } catch(err) {
                     console.error(err);
@@ -869,7 +857,6 @@
             reader.readAsDataURL(file);
         }
 
-        // --- 履歴・プレビュー ---
         function renderHistory() {
             const list = document.getElementById('history-list');
             list.innerHTML = '';
@@ -906,24 +893,46 @@
 
         let audioPlayer = null;
         let isPlaying = false;
-        function loadPreviewAudio(input) {
-            const f = input.files[0];
-            if (f) {
-                document.getElementById('preview-filename').textContent = f.name;
-                audioPlayer = document.getElementById('audio-player');
-                audioPlayer.src = URL.createObjectURL(f);
-                document.getElementById('play-icon').className = 'fa-solid fa-play ml-1';
-                isPlaying = false;
+
+        function updatePreviewPlayer() {
+            audioPlayer = document.getElementById('audio-player');
+            const previewNameEl = document.getElementById('preview-filename');
+            const vocalFile = currentProject.Files && currentProject.Files['vocal'];
+
+            if (vocalFile && vocalFile.fileUrl) {
+                previewNameEl.textContent = vocalFile.fileName || 'OriginalVer (Cloud)';
+                let playUrl = vocalFile.fileUrl;
+                // Google DriveのURLをストリーミング用に変換
+                const match = playUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                if (match && match[1]) {
+                    playUrl = `https://drive.google.com/uc?export=download&id=${match[1]}`;
+                }
+                audioPlayer.src = playUrl;
+            } else {
+                previewNameEl.textContent = 'OriginalVerが未アップロードです';
+                audioPlayer.src = '';
             }
+            resetPlayer();
         }
+
         function togglePlay() {
-            if (!audioPlayer || !audioPlayer.src) return showToast("ファイルを選択してください");
-            if (isPlaying) { audioPlayer.pause(); document.getElementById('play-icon').className = 'fa-solid fa-play ml-1'; } 
-            else { audioPlayer.play(); document.getElementById('play-icon').className = 'fa-solid fa-pause'; }
+            if (!audioPlayer || !audioPlayer.src) return showToast("再生可能なOriginalVer音源がありません");
+            if (isPlaying) { 
+                audioPlayer.pause(); 
+                document.getElementById('play-icon').className = 'fa-solid fa-play ml-1'; 
+            } else { 
+                audioPlayer.play().catch(e => {
+                    console.error(e);
+                    showToast("ブラウザのポリシーにより再生できません");
+                }); 
+                document.getElementById('play-icon').className = 'fa-solid fa-pause'; 
+            }
             isPlaying = !isPlaying;
         }
+
         function resetPlayer() {
-            document.getElementById('play-icon').className = 'fa-solid fa-play ml-1';
+            const icon = document.getElementById('play-icon');
+            if(icon) icon.className = 'fa-solid fa-play ml-1';
             isPlaying = false;
         }
 
