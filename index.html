@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackManager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Nunito', 'Segoe UI', sans-serif; }
+        .smooth-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+        .glass-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .view-section { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .kanban-col { min-width: 280px; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-700 h-screen flex overflow-hidden selection:bg-green-100 selection:text-green-800">
+
+    <!-- サイドバー -->
+    <aside class="w-20 md:w-64 bg-white border-r border-gray-100 flex flex-col justify-between smooth-shadow z-20 shrink-0">
+        <div>
+            <div class="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-gray-50">
+                <div class="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-sm">
+                    <i class="fa-solid fa-music"></i>
+                </div>
+                <span class="ml-3 font-extrabold text-xl tracking-tight hidden md:block text-gray-800">TrackMgr</span>
+            </div>
+            <nav class="p-4 flex flex-col gap-2">
+                <button onclick="switchView('dashboard')" id="nav-dashboard" class="nav-btn active flex items-center gap-4 px-4 py-3 bg-green-50 text-green-600 rounded-2xl font-bold transition-all hover:bg-green-100 w-full">
+                    <i class="fa-solid fa-layer-group text-lg w-6"></i><span class="hidden md:block">ライブラリ</span>
+                </button>
+                <button onclick="switchView('roadmap')" id="nav-roadmap" class="nav-btn flex items-center gap-4 px-4 py-3 text-gray-500 rounded-2xl font-bold transition-all hover:bg-gray-50 w-full">
+                    <i class="fa-solid fa-map-location-dot text-lg w-6"></i><span class="hidden md:block">ロードマップ</span>
+                </button>
+                <button onclick="switchView('ideas')" id="nav-ideas" class="nav-btn flex items-center gap-4 px-4 py-3 text-gray-500 rounded-2xl font-bold transition-all hover:bg-gray-50 w-full">
+                    <i class="fa-solid fa-lightbulb text-lg w-6"></i><span class="hidden md:block">アイデア帳</span>
+                </button>
+                <div class="h-px bg-gray-100 my-2"></div>
+                <button onclick="switchView('settings')" id="nav-settings" class="nav-btn flex items-center gap-4 px-4 py-3 text-gray-500 rounded-2xl font-bold transition-all hover:bg-gray-50 w-full">
+                    <i class="fa-solid fa-gear text-lg w-6"></i><span class="hidden md:block">システム設定</span>
+                </button>
+            </nav>
+        </div>
+        <div class="p-4">
+            <div id="api-status" class="bg-gray-100 rounded-2xl p-4 hidden md:block border border-gray-200 text-center">
+                <i class="fa-solid fa-database text-gray-400 text-2xl mb-2" id="api-icon"></i>
+                <p class="text-[10px] font-bold text-gray-500" id="api-text">未設定</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- メインコンテンツ -->
+    <main class="flex-1 flex flex-col h-full relative bg-gray-50/50 min-w-0">
+        <!-- ヘッダー -->
+        <header class="h-20 glass-panel border-b border-gray-100 flex items-center justify-between px-8 shrink-0 z-10">
+            <h1 class="text-xl font-extrabold text-gray-800" id="header-title">楽曲管理ライブラリ</h1>
+            <div class="flex items-center gap-4">
+                <button onclick="fetchData()" class="w-10 h-10 rounded-full bg-white border-2 border-gray-200 text-gray-400 hover:text-green-500 hover:border-green-300 transition-colors flex items-center justify-center font-bold shadow-sm" title="データを同期">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-emerald-500 p-0.5 shadow-sm">
+                    <div class="w-full h-full bg-white rounded-full flex items-center justify-center border-2 border-white overflow-hidden">
+                        <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Composer&backgroundColor=transparent" alt="User">
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-6 md:p-8" id="main-scroll-area">
+            
+            <!-- 1. ダッシュボード (表形式一覧画面) -->
+            <div id="view-dashboard" class="max-w-6xl mx-auto view-section block pb-20">
+                <div class="flex justify-between items-end mb-8">
+                    <div>
+                        <h2 class="text-3xl font-extrabold text-gray-800 tracking-tight">プロジェクト一覧</h2>
+                        <p class="text-gray-400 font-bold mt-1 text-sm">スプレッドシートとDriveのデータを同期しています</p>
+                    </div>
+                    <button onclick="createNewProject()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-2xl shadow-sm transition-all transform hover:-translate-y-0.5 flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> 新規作成
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto bg-white rounded-3xl smooth-shadow border border-gray-100">
+                    <table class="w-full text-left border-collapse min-w-[800px]">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+                                <th class="p-5 font-extrabold">曲名</th>
+                                <th class="p-5 font-extrabold">Key / BPM</th>
+                                <th class="p-5 font-extrabold w-1/4">進行状況</th>
+                                <th class="p-5 font-extrabold">最終更新</th>
+                                <th class="p-5 font-extrabold text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboard-list" class="divide-y divide-gray-100">
+                            <!-- テンプレートから生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. 詳細画面 (プロジェクト詳細) -->
+            <div id="view-detail" class="max-w-4xl mx-auto view-section hidden pb-20">
+                <div class="flex justify-between items-center mb-6">
+                    <button onclick="switchView('dashboard')" class="text-gray-400 hover:text-gray-600 font-bold flex items-center transition-colors bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm w-fit">
+                        <i class="fa-solid fa-arrow-left mr-2"></i> 一覧に戻る
+                    </button>
+                    <button onclick="saveProjectData()" id="btn-save-project" class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-sm transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-floppy-disk"></i> プロジェクトを保存
+                    </button>
+                </div>
+                
+                <div class="bg-white rounded-3xl p-8 smooth-shadow border border-gray-100">
+                    <div class="flex flex-wrap justify-between items-start mb-4 gap-4">
+                        <div class="flex-1 w-full">
+                            <input type="text" id="detail-title" placeholder="曲名を入力" class="w-full text-3xl md:text-4xl font-extrabold text-gray-800 border-none outline-none placeholder-gray-200 bg-transparent mb-4" oninput="updateExpectedPaths()">
+                            
+                            <div class="flex flex-wrap items-center gap-3">
+                                <div class="flex items-center bg-gray-50 rounded-xl px-4 py-2 border-2 border-gray-100">
+                                    <span class="text-xs font-bold text-gray-400 mr-2 uppercase tracking-wide">Key</span>
+                                    <select id="detail-key" class="bg-transparent font-bold text-gray-700 outline-none cursor-pointer" onchange="updateExpectedPaths()">
+                                        <option value="">未設定</option>
+                                        <optgroup label="Major">
+                                            <option value="Cmaj">Cmaj</option><option value="Dbmaj">Dbmaj</option><option value="Dmaj">Dmaj</option>
+                                            <option value="Ebmaj">Ebmaj</option><option value="Emaj">Emaj</option><option value="Fmaj">Fmaj</option>
+                                            <option value="F#maj">F#maj</option><option value="Gmaj">Gmaj</option><option value="Abmaj">Abmaj</option>
+                                            <option value="Amaj">Amaj</option><option value="Bbmaj">Bbmaj</option><option value="Bmaj">Bmaj</option>
+                                        </optgroup>
+                                        <optgroup label="Minor">
+                                            <option value="Cmin">Cmin</option><option value="C#min">C#min</option><option value="Dmin">Dmin</option>
+                                            <option value="D#min">D#min</option><option value="Emin">Emin</option><option value="Fmin">Fmin</option>
+                                            <option value="F#min">F#min</option><option value="Gmin">Gmin</option><option value="G#min">G#min</option>
+                                            <option value="Amin">Amin</option><option value="Bbmin">Bbmin</option><option value="Bmin">Bmin</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                <div class="flex items-center bg-gray-50 rounded-xl px-4 py-2 border-2 border-gray-100">
+                                    <span class="text-xs font-bold text-gray-400 mr-2 uppercase tracking-wide">BPM</span>
+                                    <input type="number" id="detail-bpm" placeholder="120" class="w-16 bg-transparent font-bold text-gray-700 outline-none" oninput="updateExpectedPaths()">
+                                </div>
+                                <div class="text-xs font-bold text-gray-400 ml-2 mt-2 md:mt-0" id="detail-date"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 制作ステータス -->
+                    <div class="mt-10 mb-12">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-sm font-extrabold text-gray-800 tracking-wider">Production Status</h3>
+                        </div>
+                        <div class="relative pt-4">
+                            <div class="absolute top-1/2 left-0 w-full h-2 bg-gray-100 rounded-full -translate-y-1/2 z-0"></div>
+                            <div class="absolute top-1/2 left-0 h-2 bg-green-400 rounded-full -translate-y-1/2 z-0 transition-all duration-500 ease-out" id="stage-bar"></div>
+                            <div class="flex justify-between relative z-10" id="stage-container">
+                                <!-- テンプレートから生成 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- リンク & メモ -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                        <div class="bg-gray-50 rounded-2xl p-5 border-2 border-gray-100 relative group overflow-hidden">
+                            <div class="absolute top-0 right-0 w-16 h-16 bg-blue-100 rounded-bl-full -z-0 opacity-50 transition-transform group-hover:scale-110"></div>
+                            <div class="flex items-center gap-2 mb-3 relative z-10">
+                                <i class="fa-brands fa-google-drive text-blue-500 text-lg"></i>
+                                <h3 class="text-sm font-extrabold text-gray-700">Google Drive フォルダ</h3>
+                            </div>
+                            <div class="flex gap-2 relative z-10">
+                                <input type="text" id="detail-folder" readonly placeholder="保存すると自動発行されます" class="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-400 cursor-not-allowed">
+                                <button onclick="openFolder()" class="bg-blue-500 hover:bg-blue-600 text-white rounded-xl px-4 font-bold transition-colors shadow-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 rounded-2xl p-5 border-2 border-gray-100 relative group overflow-hidden">
+                            <div class="absolute top-0 right-0 w-16 h-16 bg-yellow-100 rounded-bl-full -z-0 opacity-50 transition-transform group-hover:scale-110"></div>
+                            <div class="flex items-center gap-2 mb-3 relative z-10">
+                                <i class="fa-solid fa-pen text-yellow-500 text-lg"></i>
+                                <h3 class="text-sm font-extrabold text-gray-700">全体メモ・リファレンス</h3>
+                            </div>
+                            <textarea id="detail-memo" placeholder="ボーカルディレクション、参考曲のURLなど..." class="w-full h-12 bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 resize-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all relative z-10"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- プレビュー & 修正履歴 -->
+                    <div class="bg-green-50/50 rounded-2xl p-6 border-2 border-green-50 mb-10">
+                        <h3 class="text-sm font-extrabold text-green-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-headphones"></i> Preview & Revision History</h3>
+                        <div class="bg-white rounded-xl p-4 border border-green-100 shadow-sm mb-4 flex items-center gap-4">
+                            <button id="play-btn" class="w-12 h-12 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0 hover:bg-green-600 transition-colors shadow-sm" onclick="togglePlay()">
+                                <i class="fa-solid fa-play ml-1" id="play-icon"></i>
+                            </button>
+                            <div class="flex-1 w-full overflow-hidden">
+                                <div class="flex justify-between text-xs font-bold text-gray-500 mb-1 truncate">
+                                    <span id="preview-filename">プレビュー用オーディオが選択されていません</span>
+                                </div>
+                                <input type="file" id="preview-file" accept="audio/*" class="text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-green-50 file:text-green-600 hover:file:bg-green-100 cursor-pointer outline-none w-full" onchange="loadPreviewAudio(this)">
+                                <audio id="audio-player" class="hidden" onended="resetPlayer()"></audio>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl border border-green-100 p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="text-xs font-bold text-gray-500">更新履歴</span>
+                                <button onclick="addManualHistory()" class="text-xs font-bold text-green-600 hover:bg-green-50 px-3 py-1.5 rounded-lg transition-colors border border-green-100 shadow-sm"><i class="fa-solid fa-plus"></i> 手動メモ</button>
+                            </div>
+                            <div id="history-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-2">
+                                <!-- テンプレートから生成 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ファイルアップロード -->
+                    <div>
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-sm font-extrabold text-gray-800 flex items-center gap-2 tracking-wider">
+                                <i class="fa-solid fa-box-archive text-gray-400"></i> Files & Assets
+                            </h3>
+                            <div class="flex items-center gap-3">
+                                <div class="w-24 md:w-32 h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                    <div class="h-full bg-green-400 transition-all duration-300" id="file-bar"></div>
+                                </div>
+                                <span class="text-xs font-extrabold text-gray-400 w-16 text-right" id="file-count"></span>
+                            </div>
+                        </div>
+                        <div id="file-checklist" class="flex flex-col gap-4">
+                            <!-- テンプレートから生成 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. ロードマップ画面 -->
+            <div id="view-roadmap" class="view-section hidden h-full flex flex-col pb-10">
+                <div class="mb-6">
+                    <h2 class="text-3xl font-extrabold text-gray-800 tracking-tight">制作ロードマップ</h2>
+                    <p class="text-gray-400 font-bold mt-1 text-sm">全プロジェクトの進行状況を俯瞰します</p>
+                </div>
+                <div class="flex gap-6 overflow-x-auto pb-4 flex-1 items-start h-full">
+                    <div class="kanban-col bg-gray-100/70 rounded-3xl p-4 flex flex-col gap-3 h-full border border-gray-200/50">
+                        <div class="flex justify-between items-center px-2 py-1 mb-2">
+                            <h3 class="font-extrabold text-gray-700 text-sm flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-gray-400"></div>アイデア・メモ</h3>
+                            <span class="text-xs font-bold text-gray-400 bg-gray-200/50 px-2 py-0.5 rounded-full" id="count-0">0</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto flex flex-col gap-3" id="col-0"></div>
+                    </div>
+                    <div class="kanban-col bg-blue-50/50 rounded-3xl p-4 flex flex-col gap-3 h-full border border-blue-100/50">
+                        <div class="flex justify-between items-center px-2 py-1 mb-2">
+                            <h3 class="font-extrabold text-blue-800 text-sm flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div>作曲・編曲</h3>
+                            <span class="text-xs font-bold text-blue-400 bg-blue-100/50 px-2 py-0.5 rounded-full" id="count-1">0</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto flex flex-col gap-3" id="col-1"></div>
+                    </div>
+                    <div class="kanban-col bg-purple-50/50 rounded-3xl p-4 flex flex-col gap-3 h-full border border-purple-100/50">
+                        <div class="flex justify-between items-center px-2 py-1 mb-2">
+                            <h3 class="font-extrabold text-purple-800 text-sm flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-purple-400"></div>ミックス・マスタリング</h3>
+                            <span class="text-xs font-bold text-purple-400 bg-purple-100/50 px-2 py-0.5 rounded-full" id="count-2">0</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto flex flex-col gap-3" id="col-2"></div>
+                    </div>
+                    <div class="kanban-col bg-green-50/50 rounded-3xl p-4 flex flex-col gap-3 h-full border border-green-100/50">
+                        <div class="flex justify-between items-center px-2 py-1 mb-2">
+                            <h3 class="font-extrabold text-green-800 text-sm flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-green-400"></div>完成・リリース</h3>
+                            <span class="text-xs font-bold text-green-400 bg-green-100/50 px-2 py-0.5 rounded-full" id="count-3">0</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto flex flex-col gap-3" id="col-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. アイデア帳 -->
+            <div id="view-ideas" class="max-w-6xl mx-auto view-section hidden pb-20">
+                <div class="flex justify-between items-end mb-8">
+                    <div>
+                        <h2 class="text-3xl font-extrabold text-gray-800 tracking-tight">アイデア帳</h2>
+                        <p class="text-gray-400 font-bold mt-1 text-sm">思いついたフレーズやテーマのストック</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="ideas-grid">
+                    <!-- テンプレートから生成 -->
+                </div>
+            </div>
+
+            <!-- 5. システム設定 -->
+            <div id="view-settings" class="max-w-3xl mx-auto view-section hidden pb-20">
+                <div class="mb-8">
+                    <h2 class="text-3xl font-extrabold text-gray-800 tracking-tight">システム設定</h2>
+                    <p class="text-gray-400 font-bold mt-1 text-sm">Google Drive & スプレッドシート連携設定</p>
+                </div>
+                <div class="bg-white rounded-3xl p-8 smooth-shadow border border-gray-100 space-y-6">
+                    <div>
+                        <label class="block text-sm font-extrabold text-gray-700 mb-2">GAS Web App URL</label>
+                        <input type="text" id="set-gas" placeholder="https://script.google.com/macros/s/..." class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 focus:border-green-400 focus:bg-white transition-all" onchange="saveSettings()">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-extrabold text-gray-700 mb-2">Google スプレッドシート ID</label>
+                        <input type="text" id="set-ss" placeholder="1ABCDEFG..." class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 focus:border-green-400 focus:bg-white transition-all" onchange="saveSettings()">
+                        <p class="text-[10px] text-gray-400 font-bold mt-1">※このシートに曲のメタデータ（BPM、ステータス、履歴等）が保存されます。</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-extrabold text-gray-700 mb-2">Google Drive ルートフォルダ ID</label>
+                        <input type="text" id="set-drive" placeholder="1XcA91WI_WlheH1tNNxsTczkbCNrr-Y0u" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none text-sm font-medium text-gray-600 focus:border-green-400 focus:bg-white transition-all" onchange="saveSettings()">
+                        <p class="text-[10px] text-gray-400 font-bold mt-1">※このフォルダ内に、各曲の保存先フォルダが自動生成されます。</p>
+                    </div>
+                    <div class="pt-4">
+                        <button onclick="saveSettings()" class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-all">設定を保存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- トースト通知 -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white px-6 py-3 rounded-xl font-bold shadow-lg transform transition-all duration-300 translate-y-24 opacity-0 z-50 flex items-center gap-3">
+        <i class="fa-solid fa-circle-check text-green-400"></i>
+        <span id="toast-msg">保存しました！</span>
+    </div>
+
+    <!-- DOM生成用テンプレート (HTML直書き排除用) -->
+    <template id="tmpl-dashboard-row">
+        <tr class="hover:bg-gray-50 transition-colors group cursor-pointer border-b border-gray-50 last:border-0">
+            <td class="p-5"><div class="row-title font-extrabold text-gray-800 group-hover:text-green-600 transition-colors"></div></td>
+            <td class="p-5">
+                <div class="flex items-center gap-2">
+                    <span class="row-key text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200 hidden"></span>
+                    <span class="row-bpm text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200 hidden"></span>
+                </div>
+            </td>
+            <td class="p-5">
+                <div class="w-full max-w-[200px]">
+                    <div class="flex justify-between text-[10px] font-bold text-gray-500 mb-1">
+                        <span class="row-stage-txt"></span>
+                        <span class="row-stage-pct"></span>
+                    </div>
+                    <div class="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="row-stage-bar h-full bg-green-400"></div>
+                    </div>
+                </div>
+            </td>
+            <td class="p-5"><span class="row-date text-xs font-bold text-gray-400"></span></td>
+            <td class="p-5 text-right">
+                <button class="w-8 h-8 rounded-full bg-white border border-gray-200 text-gray-400 group-hover:text-green-500 group-hover:border-green-300 transition-colors flex items-center justify-center ml-auto shadow-sm">
+                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
+            </td>
+        </tr>
+    </template>
+
+    <template id="tmpl-stage-step">
+        <div class="step-container flex flex-col items-center cursor-pointer group">
+            <div class="step-circle rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 z-10 group-hover:scale-110"></div>
+            <span class="step-label text-[10px] mt-2 transition-all"></span>
+        </div>
+    </template>
+
+    <template id="tmpl-file-item">
+        <div class="file-box p-4 rounded-2xl border-2 flex flex-col gap-3 transition-colors">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-3">
+                    <div class="file-icon-box w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors">
+                        <i class="file-icon text-lg fa-solid"></i>
+                    </div>
+                    <div>
+                        <div class="file-name-label font-extrabold text-sm"></div>
+                        <div class="file-path-label text-[10px] font-mono px-2 py-0.5 rounded mt-1 border"></div>
+                    </div>
+                </div>
+                <div class="file-status-badge"></div>
+            </div>
+            <div class="pl-13 md:pl-13 mt-2 flex flex-col gap-2">
+                <input type="text" class="file-memo-input w-full bg-white border border-gray-200 rounded-xl outline-none text-xs font-bold text-gray-600 px-3 py-2.5 focus:border-green-400 focus:ring-2 focus:ring-green-50 transition-colors" placeholder="アップロード時の個別メモ">
+                <div class="flex flex-wrap items-center gap-2 mt-1">
+                    <input type="file" class="file-upload-input text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer max-w-[200px] outline-none">
+                    <button class="file-upload-btn bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors flex items-center shadow-sm">
+                        <i class="fa-solid fa-cloud-arrow-up mr-2"></i> Upload
+                    </button>
+                    <div class="file-actions ml-auto flex gap-2"></div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-history-item">
+        <div class="flex items-start gap-3 p-3 hover:bg-green-50/50 rounded-xl transition-colors border border-transparent hover:border-green-100">
+            <div class="hist-time text-[10px] font-extrabold text-green-600 bg-green-100 px-2 py-1 rounded-md shrink-0 w-16 text-center shadow-sm"></div>
+            <div>
+                <div class="hist-action text-xs font-extrabold text-gray-800"></div>
+                <div class="hist-detail text-[11px] text-gray-500 font-medium mt-0.5"></div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-roadmap-card">
+        <div class="roadmap-card bg-white p-4 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all">
+            <div class="rm-title font-extrabold text-gray-800 text-sm mb-2 leading-tight"></div>
+            <div class="rm-tags flex items-center gap-2 mb-3"></div>
+            <div class="flex justify-between items-center text-[10px] text-gray-400 font-bold border-t border-gray-50 pt-2">
+                <span><i class="fa-regular fa-clock"></i> <span class="rm-date"></span></span>
+                <span class="rm-stage bg-gray-100 px-2 py-0.5 rounded-md text-gray-500"></span>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // 定数設定
+        const STAGES = ['メモ', '作曲', '編曲', 'ミックス', 'マスタリング', '完成'];
+        const FILE_TYPES = [
+            { id: 'vocal', name: 'OriginalVer', icon: 'fa-microphone-lines' },
+            { id: 'inst', name: 'instrumental', icon: 'fa-guitar' },
+            { id: 'nodrum', name: 'NO_Drum', icon: 'fa-ban' },
+            { id: 'drumsolo', name: 'solo_Drum', icon: 'fa-drum' },
+            { id: 'project', name: 'Project-Data', icon: 'fa-folder-tree' }
+        ];
+
+        // 状態管理
+        let projectsData = [];
+        let currentProject = null;
+        let isUploading = false;
+
+        // UI初期化
+        window.onload = () => {
+            loadSettings();
+            generateMockIdeas();
+            fetchData();
+        };
+
+        // --- 設定 (LocalStorage) ---
+        function loadSettings() {
+            document.getElementById('set-gas').value = localStorage.getItem('tm_gas') || '';
+            document.getElementById('set-ss').value = localStorage.getItem('tm_ss') || '';
+            document.getElementById('set-drive').value = localStorage.getItem('tm_drive') || '';
+            updateApiStatus();
+        }
+
+        function saveSettings() {
+            localStorage.setItem('tm_gas', document.getElementById('set-gas').value.trim());
+            localStorage.setItem('tm_ss', document.getElementById('set-ss').value.trim());
+            localStorage.setItem('tm_drive', document.getElementById('set-drive').value.trim());
+            updateApiStatus();
+            showToast('設定を保存しました');
+            fetchData();
+        }
+
+        function updateApiStatus() {
+            const hasApi = localStorage.getItem('tm_gas') && localStorage.getItem('tm_ss') && localStorage.getItem('tm_drive');
+            const box = document.getElementById('api-status');
+            const icon = document.getElementById('api-icon');
+            const txt = document.getElementById('api-text');
+            if (hasApi) {
+                box.className = "bg-green-50 rounded-2xl p-4 hidden md:block border border-green-100 text-center";
+                icon.className = "fa-solid fa-database text-green-500 text-2xl mb-2";
+                txt.className = "text-[10px] font-bold text-green-600";
+                txt.textContent = "データベース連携中";
+            } else {
+                box.className = "bg-gray-100 rounded-2xl p-4 hidden md:block border border-gray-200 text-center";
+                icon.className = "fa-solid fa-database text-gray-400 text-2xl mb-2";
+                txt.className = "text-[10px] font-bold text-gray-500";
+                txt.textContent = "API未設定";
+            }
+        }
+
+        // --- データ取得 (GAS) ---
+        async function fetchData() {
+            const gasUrl = localStorage.getItem('tm_gas');
+            const ssId = localStorage.getItem('tm_ss');
+            const list = document.getElementById('dashboard-list');
+            
+            if (!gasUrl || !ssId) {
+                list.innerHTML = '';
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 5;
+                td.className = "p-8 text-center text-red-400 font-bold";
+                td.textContent = "設定画面からGAS URLとスプレッドシートIDを登録してください";
+                tr.appendChild(td);
+                list.appendChild(tr);
+                return;
+            }
+
+            list.innerHTML = '';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 5;
+            td.className = "p-8 text-center text-gray-400 font-bold";
+            td.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>データベースから同期中...';
+            tr.appendChild(td);
+            list.appendChild(tr);
+
+            try {
+                // GETリクエストでスプレッドシートのデータを取得
+                const res = await fetch(`${gasUrl}?ssId=${ssId}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                projectsData = data;
+                renderDashboard();
+                renderRoadmap();
+                showToast("データを同期しました");
+            } catch (err) {
+                console.error(err);
+                td.textContent = "エラー: データの取得に失敗しました。";
+                td.className = "p-8 text-center text-red-400 font-bold";
+            }
+        }
+
+        // --- View切り替え ---
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.className = "nav-btn flex items-center gap-4 px-4 py-3 text-gray-500 rounded-2xl font-bold transition-all hover:bg-gray-50 w-full";
+            });
+            
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
+            
+            const titles = { 'dashboard': '楽曲管理ライブラリ', 'detail': 'プロジェクト詳細', 'roadmap': '制作ロードマップ', 'ideas': 'アイデア帳', 'settings': 'システム設定' };
+            document.getElementById('header-title').textContent = titles[viewId];
+            
+            if(viewId !== 'detail') {
+                const btn = document.getElementById(`nav-${viewId}`);
+                if(btn) btn.className = "nav-btn active flex items-center gap-4 px-4 py-3 bg-green-50 text-green-600 rounded-2xl font-bold transition-all hover:bg-green-100 w-full";
+            }
+
+            if (viewId === 'dashboard') renderDashboard();
+            if (viewId === 'roadmap') renderRoadmap();
+        }
+
+        // --- DOM生成系 (Template使用) ---
+        function renderDashboard() {
+            const list = document.getElementById('dashboard-list');
+            list.innerHTML = '';
+            const tmpl = document.getElementById('tmpl-dashboard-row');
+
+            if (projectsData.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 5;
+                td.className = "p-8 text-center text-gray-400 font-bold";
+                td.textContent = "プロジェクトがありません";
+                tr.appendChild(td);
+                list.appendChild(tr);
+                return;
+            }
+
+            projectsData.forEach(p => {
+                const clone = tmpl.content.cloneNode(true);
+                const tr = clone.querySelector('tr');
+                tr.onclick = () => openProject(p);
+
+                clone.querySelector('.row-title').textContent = p.Title || 'Untitled';
+                
+                if (p.Key) {
+                    const k = clone.querySelector('.row-key');
+                    k.textContent = p.Key;
+                    k.classList.remove('hidden');
+                }
+                if (p.BPM) {
+                    const b = clone.querySelector('.row-bpm');
+                    b.textContent = `BPM ${p.BPM}`;
+                    b.classList.remove('hidden');
+                }
+
+                const stageIdx = p.Stage || 0;
+                const pct = Math.round((stageIdx / (STAGES.length - 1)) * 100);
+                clone.querySelector('.row-stage-txt').textContent = STAGES[stageIdx];
+                clone.querySelector('.row-stage-pct').textContent = `${pct}%`;
+                const bar = clone.querySelector('.row-stage-bar');
+                bar.style.width = `${pct}%`;
+                if (stageIdx === STAGES.length - 1) bar.classList.replace('bg-green-400', 'bg-blue-400');
+                
+                clone.querySelector('.row-date').textContent = p.Date;
+                list.appendChild(clone);
+            });
+        }
+
+        function renderRoadmap() {
+            const cols = [[], [], [], []];
+            projectsData.forEach(p => {
+                const s = p.Stage || 0;
+                if(s === 0) cols[0].push(p);
+                else if(s === 1 || s === 2) cols[1].push(p);
+                else if(s === 3 || s === 4) cols[2].push(p);
+                else if(s === 5) cols[3].push(p);
+            });
+
+            const tmpl = document.getElementById('tmpl-roadmap-card');
+
+            for (let i = 0; i < 4; i++) {
+                document.getElementById(`count-${i}`).textContent = cols[i].length;
+                const colEl = document.getElementById(`col-${i}`);
+                colEl.innerHTML = '';
+                
+                cols[i].forEach(p => {
+                    const clone = tmpl.content.cloneNode(true);
+                    const card = clone.querySelector('.roadmap-card');
+                    card.onclick = () => openProject(p);
+                    
+                    clone.querySelector('.rm-title').textContent = p.Title || 'Untitled';
+                    const tags = clone.querySelector('.rm-tags');
+                    if (p.Key) {
+                        const s = document.createElement('span');
+                        s.className = "text-[10px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100";
+                        s.textContent = p.Key;
+                        tags.appendChild(s);
+                    }
+                    if (p.BPM) {
+                        const s = document.createElement('span');
+                        s.className = "text-[10px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100";
+                        s.textContent = `BPM ${p.BPM}`;
+                        tags.appendChild(s);
+                    }
+                    
+                    clone.querySelector('.rm-date').textContent = p.Date;
+                    clone.querySelector('.rm-stage').textContent = STAGES[p.Stage || 0];
+                    colEl.appendChild(clone);
+                });
+            }
+        }
+
+        // --- プロジェクト詳細操作 ---
+        function createNewProject() {
+            currentProject = {
+                ProjectId: "", Title: "", BPM: "", Key: "", Stage: 0,
+                FolderUrl: "", Date: "New Track", Memo: "", Files: {}, History: []
+            };
+            applyProjectToForm();
+            switchView('detail');
+        }
+
+        function openProject(p) {
+            currentProject = JSON.parse(JSON.stringify(p)); // Deep copy
+            applyProjectToForm();
+            switchView('detail');
+            window.scrollTo(0, 0);
+        }
+
+        function applyProjectToForm() {
+            document.getElementById('detail-title').value = currentProject.Title || '';
+            document.getElementById('detail-bpm').value = currentProject.BPM || '';
+            document.getElementById('detail-key').value = currentProject.Key || '';
+            document.getElementById('detail-date').textContent = currentProject.Date || '';
+            document.getElementById('detail-folder').value = currentProject.FolderUrl || '';
+            document.getElementById('detail-memo').value = currentProject.Memo || '';
+            
+            updateStageUI();
+            updateExpectedPaths();
+            renderFiles();
+            renderHistory();
+        }
+
+        function updateStageUI() {
+            const container = document.getElementById('stage-container');
+            container.innerHTML = '';
+            const tmpl = document.getElementById('tmpl-stage-step');
+            const curStage = currentProject.Stage || 0;
+
+            STAGES.forEach((stg, idx) => {
+                const clone = tmpl.content.cloneNode(true);
+                const step = clone.querySelector('.step-container');
+                const circle = clone.querySelector('.step-circle');
+                const label = clone.querySelector('.step-label');
+                
+                step.onclick = () => { currentProject.Stage = idx; updateStageUI(); };
+                
+                const isActive = idx <= curStage;
+                const isCurrent = idx === curStage;
+                
+                circle.className = `step-circle rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 z-10 group-hover:scale-110 ${isActive ? 'bg-green-500 text-white shadow-md' : 'bg-white text-gray-300 border-2 border-gray-200'} ${isCurrent ? 'w-10 h-10 ring-4 ring-green-100' : 'w-8 h-8'}`;
+                circle.innerHTML = isActive ? '<i class="fa-solid fa-check text-xs"></i>' : (idx + 1);
+                
+                label.className = `step-label text-[10px] mt-2 transition-all ${isActive ? 'text-gray-800' : 'text-gray-400'} ${isCurrent ? 'font-extrabold' : 'font-bold'}`;
+                label.textContent = stg;
+                
+                container.appendChild(clone);
+            });
+            
+            const pct = (curStage / (STAGES.length - 1)) * 100;
+            document.getElementById('stage-bar').style.width = `${pct}%`;
+        }
+
+        function updateExpectedPaths() {
+            const title = document.getElementById('detail-title').value.trim() || 'Untitled';
+            const bpm = document.getElementById('detail-bpm').value.trim();
+            const key = document.getElementById('detail-key').value.trim();
+            
+            let suffix = '';
+            if (key || bpm) {
+                const k = key || '-';
+                const b = bpm ? `${bpm}BPM` : '-BPM';
+                suffix = `_[${k}/${b}]`;
+            }
+
+            document.querySelectorAll('.file-box').forEach(box => {
+                const id = box.dataset.typeid;
+                let exp = '';
+                if (id === 'vocal') exp = `${title}_OriginalVer${suffix}.wav`;
+                else if (id === 'inst') exp = `${title}_instrumental${suffix}.wav`;
+                else if (id === 'nodrum') exp = `${title}_NO_Drum.wav`;
+                else if (id === 'drumsolo') exp = `${title}_solo_Drum.wav`;
+                else if (id === 'project') exp = `${title}_Project-Data.zip`;
+                
+                const pathLabel = box.querySelector('.file-path-label');
+                if(pathLabel) {
+                    pathLabel.textContent = `Save: ${title} / ${exp}`;
+                    box.dataset.filename = exp;
+                }
+            });
+        }
+
+        // --- GAS保存アクション ---
+        async function saveProjectData() {
+            if (isUploading) return;
+            const gasUrl = localStorage.getItem('tm_gas');
+            const ssId = localStorage.getItem('tm_ss');
+            const driveId = localStorage.getItem('tm_drive');
+            
+            if (!gasUrl || !ssId || !driveId) return showToast("システム設定を完了してください");
+            
+            const btn = document.getElementById('btn-save-project');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 保存中...';
+            isUploading = true;
+
+            currentProject.Title = document.getElementById('detail-title').value.trim() || 'Untitled';
+            currentProject.BPM = document.getElementById('detail-bpm').value.trim();
+            currentProject.Key = document.getElementById('detail-key').value.trim();
+            currentProject.Memo = document.getElementById('detail-memo').value.trim();
+            
+            const payload = {
+                action: 'save_project', ssId: ssId, driveId: driveId,
+                projectId: currentProject.ProjectId, title: currentProject.Title,
+                bpm: currentProject.BPM, key: currentProject.Key, stage: currentProject.Stage,
+                memo: currentProject.Memo, files: currentProject.Files, history: currentProject.History
+            };
+
+            try {
+                const res = await fetch(gasUrl, { method: 'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    currentProject.ProjectId = data.projectId;
+                    currentProject.FolderUrl = data.folderUrl;
+                    document.getElementById('detail-folder').value = data.folderUrl;
+                    showToast("プロジェクトを保存しました");
+                    fetchData(); // 一覧を再取得
+                } else { throw new Error(data.message); }
+            } catch (err) {
+                console.error(err);
+                showToast("保存エラーが発生しました");
+            } finally {
+                btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> プロジェクトを保存';
+                isUploading = false;
+            }
+        }
+
+        // --- ファイルアップロードと描画 ---
+        function renderFiles() {
+            const container = document.getElementById('file-checklist');
+            container.innerHTML = '';
+            const tmpl = document.getElementById('tmpl-file-item');
+            let upCount = 0;
+
+            FILE_TYPES.forEach(ft => {
+                const fData = currentProject.Files[ft.id] || {};
+                const isUp = !!fData.fileUrl;
+                if(isUp) upCount++;
+
+                const clone = tmpl.content.cloneNode(true);
+                const box = clone.querySelector('.file-box');
+                box.dataset.typeid = ft.id;
+                
+                box.className = `file-box p-4 rounded-2xl border-2 flex flex-col gap-3 transition-colors ${isUp ? 'bg-green-50/40 border-green-300' : 'bg-white border-gray-200'}`;
+                
+                const iconBox = clone.querySelector('.file-icon-box');
+                iconBox.className = `file-icon-box w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isUp ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`;
+                iconBox.querySelector('.file-icon').classList.add(ft.icon);
+                
+                clone.querySelector('.file-name-label').textContent = ft.name;
+                clone.querySelector('.file-name-label').className = `file-name-label font-extrabold text-sm ${isUp ? 'text-gray-900' : 'text-gray-600'}`;
+                
+                const badge = clone.querySelector('.file-status-badge');
+                if (isUp) {
+                    badge.innerHTML = `<span class="text-xs font-extrabold text-green-700 bg-green-100 px-3 py-1 rounded-full border border-green-200 flex items-center gap-1"><i class="fa-solid fa-cloud-check"></i> Uploaded</span>`;
+                } else {
+                    badge.innerHTML = `<span class="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">No file</span>`;
+                }
+
+                clone.querySelector('.file-memo-input').value = fData.memo || '';
+                
+                const upBtn = clone.querySelector('.file-upload-btn');
+                upBtn.onclick = (e) => handleUpload(e.target, ft.id);
+                
+                const actions = clone.querySelector('.file-actions');
+                if (isUp) {
+                    const a = document.createElement('a');
+                    a.href = fData.fileUrl; a.target = "_blank";
+                    a.className = "text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors flex items-center gap-1";
+                    a.innerHTML = '<i class="fa-solid fa-link"></i> 開く';
+                    actions.appendChild(a);
+                }
+
+                container.appendChild(clone);
+            });
+
+            document.getElementById('file-count').textContent = `${upCount}/${FILE_TYPES.length} 完了`;
+            const bar = document.getElementById('file-bar');
+            bar.style.width = `${(upCount / FILE_TYPES.length) * 100}%`;
+            bar.className = `h-full transition-all duration-300 ${upCount === FILE_TYPES.length ? 'bg-blue-500' : 'bg-green-400'}`;
+            
+            updateExpectedPaths();
+        }
+
+        async function handleUpload(btnElement, typeId) {
+            if (!currentProject.ProjectId) {
+                showToast("先に『プロジェクトを保存』してください");
+                return;
+            }
+
+            const box = btnElement.closest('.file-box');
+            const fileInput = box.querySelector('.file-upload-input');
+            const file = fileInput.files[0];
+            const memo = box.querySelector('.file-memo-input').value.trim();
+            const fileName = box.dataset.filename;
+
+            if (!file) return showToast("ファイルを選択してください");
+            
+            const gasUrl = localStorage.getItem('tm_gas');
+            const ssId = localStorage.getItem('tm_ss');
+            const driveId = localStorage.getItem('tm_drive');
+            
+            const originalBtnHtml = btnElement.innerHTML;
+            btnElement.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btnElement.disabled = true;
+            isUploading = true;
+            showToast(`[${fileName}] アップロード中...`);
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const b64 = e.target.result.split(',')[1];
+                const payload = {
+                    action: 'upload_file', ssId: ssId, driveId: driveId,
+                    projectId: currentProject.ProjectId, title: currentProject.Title,
+                    fileTypeId: typeId, fileName: fileName, mimeType: file.type,
+                    fileMemo: memo, fileData: b64
+                };
+
+                try {
+                    const res = await fetch(gasUrl, { method: 'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        if(!currentProject.Files) currentProject.Files = {};
+                        currentProject.Files[typeId] = { fileName: fileName, fileUrl: data.fileUrl, memo: memo };
+                        
+                        const now = new Date();
+                        const timeStr = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+                        currentProject.History.unshift({ time: timeStr, action: `[${FILE_TYPES.find(f=>f.id===typeId).name}] Upload`, detail: memo || fileName });
+                        
+                        showToast("アップロード完了！");
+                        applyProjectToForm(); // 再描画
+                    } else { throw new Error(data.message); }
+                } catch(err) {
+                    console.error(err);
+                    showToast("エラー: アップロード失敗");
+                } finally {
+                    btnElement.innerHTML = originalBtnHtml;
+                    btnElement.disabled = false;
+                    isUploading = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // --- 履歴・プレビュー ---
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+            const tmpl = document.getElementById('tmpl-history-item');
+            const hist = currentProject.History || [];
+            
+            if (hist.length === 0) {
+                const div = document.createElement('div');
+                div.className = "text-xs text-gray-400 font-bold py-4 text-center border-2 border-dashed border-gray-100 rounded-xl";
+                div.textContent = "履歴がありません";
+                list.appendChild(div);
+                return;
+            }
+
+            hist.forEach(h => {
+                const clone = tmpl.content.cloneNode(true);
+                clone.querySelector('.hist-time').textContent = h.time;
+                clone.querySelector('.hist-action').textContent = h.action;
+                clone.querySelector('.hist-detail').textContent = h.detail;
+                list.appendChild(clone);
+            });
+        }
+
+        function addManualHistory() {
+            const note = prompt("修正メモを入力してください:");
+            if (note) {
+                const now = new Date();
+                const timeStr = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+                if(!currentProject.History) currentProject.History = [];
+                currentProject.History.unshift({ time: timeStr, action: "手動メモ", detail: note });
+                renderHistory();
+            }
+        }
+
+        let audioPlayer = null;
+        let isPlaying = false;
+        function loadPreviewAudio(input) {
+            const f = input.files[0];
+            if (f) {
+                document.getElementById('preview-filename').textContent = f.name;
+                audioPlayer = document.getElementById('audio-player');
+                audioPlayer.src = URL.createObjectURL(f);
+                document.getElementById('play-icon').className = 'fa-solid fa-play ml-1';
+                isPlaying = false;
+            }
+        }
+        function togglePlay() {
+            if (!audioPlayer || !audioPlayer.src) return showToast("ファイルを選択してください");
+            if (isPlaying) { audioPlayer.pause(); document.getElementById('play-icon').className = 'fa-solid fa-play ml-1'; } 
+            else { audioPlayer.play(); document.getElementById('play-icon').className = 'fa-solid fa-pause'; }
+            isPlaying = !isPlaying;
+        }
+        function resetPlayer() {
+            document.getElementById('play-icon').className = 'fa-solid fa-play ml-1';
+            isPlaying = false;
+        }
+
+        function openFolder() {
+            const url = document.getElementById('detail-folder').value;
+            if(url) window.open(url, '_blank'); else showToast("URLがありません");
+        }
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            t.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => { t.classList.add('translate-y-24', 'opacity-0'); }, 3000);
+        }
+
+        function generateMockIdeas() {
+            const grid = document.getElementById('ideas-grid');
+            const ideas = [
+                { title: '爽やかポップス サビ', type: 'audio', date: '今日 14:30', color: 'bg-yellow-50', txt: '' },
+                { title: 'Aメロ歌詞案', type: 'text', date: '昨日', txt: '夜の街を抜け出して〜', color: 'bg-blue-50' }
+            ];
+            ideas.forEach(i => {
+                const div = document.createElement('div');
+                div.className = `${i.color} p-5 rounded-3xl border border-gray-100/50 shadow-sm relative cursor-pointer hover:shadow-md transition-all`;
+                
+                const icon = document.createElement('div');
+                icon.className = "absolute top-4 right-4 text-gray-300";
+                icon.innerHTML = `<i class="fa-solid ${i.type === 'audio' ? 'fa-microphone' : 'fa-align-left'}"></i>`;
+                div.appendChild(icon);
+                
+                const title = document.createElement('h3');
+                title.className = "font-extrabold text-gray-800 mb-2 pr-6";
+                title.textContent = i.title;
+                div.appendChild(title);
+                
+                if (i.type === 'audio') {
+                    const au = document.createElement('div');
+                    au.className = "flex items-center gap-2 mt-4 bg-white/60 p-2 rounded-xl border border-white";
+                    au.innerHTML = `<button class="w-8 h-8 rounded-full bg-gray-800 text-white flex justify-center items-center shrink-0"><i class="fa-solid fa-play text-[10px] ml-0.5"></i></button><div class="flex-1 h-1.5 bg-gray-200 rounded-full"><div class="w-1/3 h-full bg-gray-800 rounded-full"></div></div>`;
+                    div.appendChild(au);
+                } else {
+                    const p = document.createElement('p');
+                    p.className = "text-xs text-gray-600 font-bold mt-2 bg-white/50 p-3 rounded-xl";
+                    p.textContent = i.txt;
+                    div.appendChild(p);
+                }
+                
+                const date = document.createElement('div');
+                date.className = "text-[10px] text-gray-400 font-bold mt-4 pt-3 border-t border-gray-200/30";
+                date.textContent = i.date;
+                div.appendChild(date);
+                
+                grid.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>
