@@ -112,9 +112,14 @@
                     <button onclick="switchView('dashboard')" class="text-gray-400 hover:text-gray-600 font-bold flex items-center transition-colors bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm w-fit">
                         <i class="fa-solid fa-arrow-left mr-2"></i> 一覧に戻る
                     </button>
-                    <button onclick="saveProjectData()" id="btn-save-project" class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-sm transition-all flex items-center gap-2">
-                        <i class="fa-solid fa-floppy-disk"></i> プロジェクトを保存
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <button onclick="deleteProject()" id="btn-delete-project" class="text-red-500 hover:bg-red-50 font-bold py-2.5 px-4 rounded-xl transition-all flex items-center gap-2 border border-transparent hover:border-red-100">
+                            <i class="fa-solid fa-trash-can"></i> 削除
+                        </button>
+                        <button onclick="saveProjectData()" id="btn-save-project" class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-sm transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-floppy-disk"></i> プロジェクトを保存
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="bg-white rounded-3xl p-8 smooth-shadow border border-gray-100">
@@ -782,8 +787,14 @@
                     const a = document.createElement('a');
                     a.href = fData.fileUrl; a.target = "_blank";
                     a.className = "text-blue-500 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors flex items-center gap-1";
-                    a.innerHTML = '<i class="fa-solid fa-link"></i> 開く';
+                    a.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i> 開く';
                     actions.appendChild(a);
+                    
+                    const dl = document.createElement('button');
+                    dl.onclick = () => downloadDriveFile(fData.fileUrl, fData.fileName);
+                    dl.className = "text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors flex items-center gap-1 ml-2";
+                    dl.innerHTML = '<i class="fa-solid fa-download"></i> DL';
+                    actions.appendChild(dl);
                 }
 
                 container.appendChild(clone);
@@ -857,6 +868,58 @@
             reader.readAsDataURL(file);
         }
 
+        function downloadDriveFile(url, fileName) {
+            const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (match && match[1]) {
+                const dlUrl = `https://docs.google.com/uc?export=download&id=${match[1]}`;
+                const a = document.createElement('a');
+                a.href = dlUrl;
+                a.download = fileName || 'download';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                showToast("ダウンロードを開始しました");
+            } else {
+                window.open(url, '_blank');
+            }
+        }
+
+        async function deleteProject() {
+            if (!currentProject.ProjectId) {
+                showToast("まだ保存されていないプロジェクトです");
+                switchView('dashboard');
+                return;
+            }
+            if (!confirm(`「${currentProject.Title}」を削除(アーカイブ)しますか？\n※スプレッドシートからデータが削除されます（Driveのファイルは残ります）`)) return;
+
+            const gasUrl = localStorage.getItem('tm_gas');
+            const ssId = localStorage.getItem('tm_ss');
+            const driveId = localStorage.getItem('tm_drive');
+            
+            const btn = document.getElementById('btn-delete-project');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 削除中...';
+            
+            const payload = {
+                action: 'delete_project', ssId: ssId, driveId: driveId,
+                projectId: currentProject.ProjectId
+            };
+
+            try {
+                const res = await fetch(gasUrl, { method: 'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast("プロジェクトを削除しました");
+                    fetchData();
+                    switchView('dashboard');
+                } else { throw new Error(data.message); }
+            } catch (err) {
+                console.error(err);
+                showToast("削除エラーが発生しました");
+                btn.innerHTML = originalHtml;
+            }
+        }
+
         function renderHistory() {
             const list = document.getElementById('history-list');
             list.innerHTML = '';
@@ -902,10 +965,10 @@
             if (vocalFile && vocalFile.fileUrl) {
                 previewNameEl.textContent = vocalFile.fileName || 'OriginalVer (Cloud)';
                 let playUrl = vocalFile.fileUrl;
-                // Google DriveのURLをストリーミング用に変換
+                // Google DriveのURLをストリーミング用に変換し、ポリシー突破用のURL形式に変更
                 const match = playUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
                 if (match && match[1]) {
-                    playUrl = `https://drive.google.com/uc?export=download&id=${match[1]}`;
+                    playUrl = `https://docs.google.com/uc?export=download&id=${match[1]}`;
                 }
                 audioPlayer.src = playUrl;
             } else {
@@ -916,18 +979,27 @@
         }
 
         function togglePlay() {
-            if (!audioPlayer || !audioPlayer.src) return showToast("再生可能なOriginalVer音源がありません");
+            if (!audioPlayer || !audioPlayer.src || audioPlayer.src.endsWith(window.location.host + '/')) return showToast("再生可能なOriginalVer音源がありません");
             if (isPlaying) { 
                 audioPlayer.pause(); 
                 document.getElementById('play-icon').className = 'fa-solid fa-play ml-1'; 
+                isPlaying = false;
             } else { 
-                audioPlayer.play().catch(e => {
-                    console.error(e);
-                    showToast("ブラウザのポリシーにより再生できません");
-                }); 
-                document.getElementById('play-icon').className = 'fa-solid fa-pause'; 
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        document.getElementById('play-icon').className = 'fa-solid fa-pause'; 
+                        isPlaying = true;
+                    }).catch(e => {
+                        console.error(e);
+                        isPlaying = false;
+                        // ブラウザの強力なセキュリティ設定（CORS等）で弾かれた場合のフォールバック
+                        if(confirm("ブラウザのセキュリティ設定により直接再生がブロックされました。\n別タブで音声ファイルを開いて再生・ダウンロードしますか？")) {
+                            window.open(audioPlayer.src, '_blank');
+                        }
+                    });
+                }
             }
-            isPlaying = !isPlaying;
         }
 
         function resetPlayer() {
